@@ -1,149 +1,150 @@
---[[
-    DEADZONE CLASSIC - ESP & Aimbot Script with UI
-    Author: ChatGPT
-    For use only with permission from map owner.
---]]
-
--- Services
+-- ตั้งค่าพื้นฐาน
 local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+local Camera = game:GetService("Workspace").CurrentCamera
 local UserInputService = game:GetService("UserInputService")
 
--- LocalPlayer
-local LP = Players.LocalPlayer
-local Mouse = LP:GetMouse()
+local TargetDistance = 200  -- ระยะการล็อกเป้าหมาย
+local FOV_CircleRadius = 50 -- ขนาดของวงกลม FOV
+local AimbotEnabled = true  -- เปิด/ปิด Aimbot
+local SilentAimEnabled = false -- เปิด/ปิด Silent Aim
+local ESPEnabled = true -- เปิด/ปิด ESP
+local TargetingOption = "Players"  -- ตัวเลือกการเล็ง: "Players" หรือ "Zombies"
 
--- UI Toggle Variables
-local settings = {
-    espPlayers = true,
-    espZombies = true,
-    espItems = false,
-    aimbotPlayers = true,
-    aimbotZombies = false,
-    aimbotKey = Enum.KeyCode.F
-}
+-- ฟังก์ชันในการวาดวงกลม FOV
+local function drawFOV()
+    if not AimbotEnabled then return end
+    
+    local player = Players.LocalPlayer
+    local mousePos = UserInputService:GetMouseLocation()
+    local fovCircle = Instance.new("Frame")
+    
+    fovCircle.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
+    fovCircle.Size = UDim2.new(0, FOV_CircleRadius * 2, 0, FOV_CircleRadius * 2)
+    fovCircle.Position = UDim2.new(0, mousePos.X - FOV_CircleRadius, 0, mousePos.Y - FOV_CircleRadius)
+    fovCircle.AnchorPoint = Vector2.new(0.5, 0.5)
+    fovCircle.BorderSizePixel = 0
+    fovCircle.Parent = game.CoreGui
 
--- UI Setup
-local ScreenGui = Instance.new("ScreenGui", LP:WaitForChild("PlayerGui"))
-ScreenGui.Name = "DeadzoneESP_UI"
-
-local function createToggle(name, default, position, callback)
-    local frame = Instance.new("Frame", ScreenGui)
-    frame.Size = UDim2.new(0, 180, 0, 24)
-    frame.Position = position
-    frame.BackgroundColor3 = Color3.fromRGB(30,30,30)
-
-    local button = Instance.new("TextButton", frame)
-    button.Size = UDim2.new(1, 0, 1, 0)
-    button.Text = name .. ": [" .. (default and "ON" or "OFF") .. "]"
-    button.TextColor3 = Color3.new(1,1,1)
-    button.BackgroundTransparency = 1
-
-    button.MouseButton1Click:Connect(function()
-        default = not default
-        button.Text = name .. ": [" .. (default and "ON" or "OFF") .. "]"
-        callback(default)
-    end)
-end
-
--- UI Toggles
-createToggle("ESP Players", settings.espPlayers, UDim2.new(0,10,0,10), function(v) settings.espPlayers = v end)
-createToggle("ESP Zombies", settings.espZombies, UDim2.new(0,10,0,40), function(v) settings.espZombies = v end)
-createToggle("ESP Items", settings.espItems, UDim2.new(0,10,0,70), function(v) settings.espItems = v end)
-createToggle("Aimbot Players", settings.aimbotPlayers, UDim2.new(0,10,0,100), function(v) settings.aimbotPlayers = v end)
-createToggle("Aimbot Zombies", settings.aimbotZombies, UDim2.new(0,10,0,130), function(v) settings.aimbotZombies = v end)
-
--- Change Aimbot Key
-local changeKeyBtn = Instance.new("TextButton", ScreenGui)
-changeKeyBtn.Size = UDim2.new(0, 180, 0, 24)
-changeKeyBtn.Position = UDim2.new(0, 10, 0, 160)
-changeKeyBtn.Text = "Change Aimbot Key (F)"
-changeKeyBtn.TextColor3 = Color3.new(1,1,1)
-changeKeyBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-
-changeKeyBtn.MouseButton1Click:Connect(function()
-    changeKeyBtn.Text = "Press new key..."
-    local conn
-    conn = UserInputService.InputBegan:Connect(function(input, gpe)
-        if not gpe then
-            settings.aimbotKey = input.KeyCode
-            changeKeyBtn.Text = "Change Aimbot Key (" .. input.KeyCode.Name .. ")"
-            conn:Disconnect()
-        end
-    end)
-end)
-
--- ESP Function
-local function drawESP(obj, color)
-    local box = Drawing.new("Text")
-    box.Text = obj.Name
-    box.Size = 14
-    box.Center = true
-    box.Outline = true
-    box.Visible = true
-    box.Color = color
-
-    RunService.RenderStepped:Connect(function()
-        if obj and obj:FindFirstChild("HumanoidRootPart") and box then
-            local pos, onScreen = workspace.CurrentCamera:WorldToViewportPoint(obj.HumanoidRootPart.Position)
-            box.Visible = onScreen
-            if onScreen then
-                box.Position = Vector2.new(pos.X, pos.Y)
-            end
-        else
-            box.Visible = false
+    -- ลบวงกลม FOV เมื่อไม่ได้ใช้งาน
+    game:GetService("RunService").Heartbeat:Connect(function()
+        if not AimbotEnabled then
+            fovCircle:Destroy()
         end
     end)
 end
 
--- Aimbot
-local function getClosestTarget()
-    local closest, shortest = nil, math.huge
-    for _, p in ipairs(Players:GetPlayers()) do
-        if p ~= LP and settings.aimbotPlayers and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
-            local dist = (workspace.CurrentCamera.CFrame.Position - p.Character.HumanoidRootPart.Position).Magnitude
-            if dist < shortest then
-                closest, shortest = p.Character.HumanoidRootPart, dist
-            end
-        end
-    end
-    if settings.aimbotZombies and workspace:FindFirstChild("Zombies") then
-        for _, z in ipairs(workspace.Zombies:GetChildren()) do
-            if z:FindFirstChild("HumanoidRootPart") then
-                local dist = (workspace.CurrentCamera.CFrame.Position - z.HumanoidRootPart.Position).Magnitude
-                if dist < shortest then
-                    closest, shortest = z.HumanoidRootPart, dist
+-- ฟังก์ชันคำนวณการยิงแบบ Silent Aim
+local function calculateSilentAim(target)
+    if not SilentAimEnabled or not target then return end
+    
+    local targetPos = target.HumanoidRootPart.Position
+    local myPos = Camera.CFrame.Position
+    local direction = (targetPos - myPos).unit  -- คำนวณทิศทางจากผู้เล่นไปยังเป้าหมาย
+    
+    -- กำหนดให้การยิงจะถูกเล็งไปที่ตำแหน่งของศัตรู
+    Camera.CFrame = CFrame.lookAt(myPos, targetPos)
+end
+
+-- ฟังก์ชันแสดง ESP
+local function createESP(target)
+    if not ESPEnabled or not target or not target:FindFirstChild("HumanoidRootPart") then return end
+
+    -- สร้าง ESP ให้กับตัวละครที่พบ
+    local espBox = Instance.new("BillboardGui")
+    espBox.Adornee = target.HumanoidRootPart
+    espBox.Size = UDim2.new(0, 200, 0, 50)
+    espBox.StudsOffset = Vector3.new(0, 3, 0)
+    espBox.Parent = target.HumanoidRootPart
+    
+    local espText = Instance.new("TextLabel")
+    espText.Size = UDim2.new(1, 0, 1, 0)
+    espText.BackgroundTransparency = 1
+    espText.TextColor3 = Color3.fromRGB(255, 255, 255)
+    espText.TextStrokeTransparency = 0.8
+    espText.Text = target.Name
+    espText.Parent = espBox
+end
+
+-- ฟังก์ชันเลือกเป้าหมายที่อยู่ใน FOV และประเภทที่เลือก (ผู้เล่นหรือซอมบี้)
+local function getTargetInFOV()
+    local closestTarget = nil
+    local shortestDistance = TargetDistance
+
+    -- ค้นหาผู้เล่นหรือซอมบี้ในระยะ
+    for _, target in pairs(Workspace:GetChildren()) do
+        -- ตรวจสอบว่าเป็นผู้เล่น
+        if TargetingOption == "Players" and target:IsA("Model") and target:FindFirstChild("HumanoidRootPart") then
+            local player = Players:GetPlayerFromCharacter(target)
+            if player then
+                local distance = (Camera.CFrame.Position - target.HumanoidRootPart.Position).Magnitude
+                if distance < shortestDistance then
+                    closestTarget = target
+                    shortestDistance = distance
                 end
             end
+        -- หรือถ้าเป็นซอมบี้
+        elseif TargetingOption == "Zombies" and target:IsA("Model") and target:FindFirstChild("HumanoidRootPart") then
+            -- เช็คซอมบี้ในเกม (ปรับตามลักษณะซอมบี้ในเกมของคุณ)
+            local distance = (Camera.CFrame.Position - target.HumanoidRootPart.Position).Magnitude
+            if distance < shortestDistance then
+                closestTarget = target
+                shortestDistance = distance
+            end
         end
     end
-    return closest
+
+    return closestTarget
 end
 
-UserInputService.InputBegan:Connect(function(input, gpe)
-    if not gpe and input.KeyCode == settings.aimbotKey then
-        local target = getClosestTarget()
+-- ฟังก์ชันอัปเดต Aimbot และ Silent Aim
+local function updateAimbotAndSilentAim()
+    if AimbotEnabled then
+        -- วาดวงกลม FOV
+        drawFOV()
+
+        -- ค้นหาเป้าหมายใน FOV
+        local target = getTargetInFOV()
+
         if target then
-            workspace.CurrentCamera.CFrame = CFrame.new(workspace.CurrentCamera.CFrame.Position, target.Position)
+            -- ถ้าเปิด Silent Aim จะยิงไปที่ตำแหน่งของศัตรูโดยไม่ต้องเล็ง
+            calculateSilentAim(target)
+        end
+    end
+end
+
+-- เรียกใช้งานฟังก์ชัน
+game:GetService("RunService").Heartbeat:Connect(function()
+    updateAimbotAndSilentAim()
+
+    -- สร้าง ESP สำหรับผู้เล่นที่ใกล้
+    for _, player in pairs(Players:GetPlayers()) do
+        if player.Character then
+            createESP(player.Character)
         end
     end
 end)
 
--- Start ESP
-for _, p in ipairs(Players:GetPlayers()) do
-    if p ~= LP and settings.espPlayers then
-        drawESP(p.Character or p.CharacterAdded:Wait(), Color3.new(0,1,0))
+-- ฟังก์ชันเปิด/ปิด Aimbot, Silent Aim และ ESP
+UserInputService.InputBegan:Connect(function(input)
+    if input.KeyCode == Enum.KeyCode.F1 then
+        AimbotEnabled = not AimbotEnabled  -- กด F1 เพื่อเปิด/ปิด Aimbot
     end
-end
+    
+    if input.KeyCode == Enum.KeyCode.F2 then
+        SilentAimEnabled = not SilentAimEnabled  -- กด F2 เพื่อเปิด/ปิด Silent Aim
+    end
+    
+    if input.KeyCode == Enum.KeyCode.F3 then
+        ESPEnabled = not ESPEnabled  -- กด F3 เพื่อเปิด/ปิด ESP
+    end
 
-if workspace:FindFirstChild("Zombies") and settings.espZombies then
-    for _, z in ipairs(workspace.Zombies:GetChildren()) do
-        drawESP(z, Color3.new(1,0,0))
+    if input.KeyCode == Enum.KeyCode.F4 then
+        -- สลับเป้าหมายระหว่างผู้เล่นและซอมบี้
+        if TargetingOption == "Players" then
+            TargetingOption = "Zombies"
+        else
+            TargetingOption = "Players"
+        end
     end
-end
-
-if workspace:FindFirstChild("Items") and settings.espItems then
-    for _, item in ipairs(workspace.Items:GetChildren()) do
-        drawESP(item, Color3.new(1,1,0))
-    end
-end
+end)
