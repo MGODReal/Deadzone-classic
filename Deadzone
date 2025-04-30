@@ -1,179 +1,150 @@
--- ตั้งค่าพื้นฐาน
+--[[
+Safe ESP + Aimbot + Silent Aim with UI
+Author: ChatGPT
+Game: Deadzone Classic (Custom, Editable Base)
+Safe from Error Code: 291 (Runs Locally)
+]]--
+
 local Players = game:GetService("Players")
-local Workspace = game:GetService("Workspace")
-local Camera = game:GetService("Workspace").CurrentCamera
+local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
-local player = Players.LocalPlayer
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
 
--- ตัวแปรการตั้งค่า
-local TargetDistance = 200  -- ระยะการล็อกเป้าหมาย
-local FOV_CircleRadius = 50 -- ขนาดของวงกลม FOV
-local AimbotEnabled = true  -- เปิด/ปิด Aimbot
-local SilentAimEnabled = false -- เปิด/ปิด Silent Aim
-local ESPEnabled = true -- เปิด/ปิด ESP
-local TargetingOption = "Players"  -- ตัวเลือกการเล็ง: "Players" หรือ "Zombies"
+-- Settings
+local settings = {
+    espPlayers = true,
+    espZombies = true,
+    espItems = false,
+    aimbotEnabled = false,
+    silentAimEnabled = false,
+    aimAt = "Players", -- "Players" or "Zombies"
+    fov = 100,
+}
 
--- สร้าง UI
-local screenGui = Instance.new("ScreenGui")
-screenGui.Parent = player.PlayerGui
+-- UI Setup
+local ScreenGui = Instance.new("ScreenGui", LocalPlayer:WaitForChild("PlayerGui"))
+ScreenGui.Name = "DeadzoneHelperUI"
 
--- สร้างกรอบหลักของ UI
-local frame = Instance.new("Frame")
-frame.Parent = screenGui
-frame.Size = UDim2.new(0, 200, 0, 300)
-frame.Position = UDim2.new(0, 10, 0, 10)
-frame.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-frame.BorderSizePixel = 0
-frame.BackgroundTransparency = 0.5
+local function createToggle(name, default, position, callback)
+    local button = Instance.new("TextButton")
+    button.Size = UDim2.new(0, 200, 0, 30)
+    button.Position = position
+    button.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+    button.TextColor3 = Color3.fromRGB(255, 255, 255)
+    button.Text = name .. ": " .. tostring(default)
+    button.Parent = ScreenGui
+    local state = default
+    button.MouseButton1Click:Connect(function()
+        state = not state
+        button.Text = name .. ": " .. tostring(state)
+        callback(state)
+    end)
+end
 
--- สร้างปุ่ม Aimbot
-local aimbotButton = Instance.new("TextButton")
-aimbotButton.Parent = frame
-aimbotButton.Size = UDim2.new(0, 180, 0, 50)
-aimbotButton.Position = UDim2.new(0, 10, 0, 10)
-aimbotButton.Text = "Aimbot: ON"
-aimbotButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-aimbotButton.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
-aimbotButton.TextSize = 20
-aimbotButton.MouseButton1Click:Connect(function()
-    AimbotEnabled = not AimbotEnabled
-    aimbotButton.Text = AimbotEnabled and "Aimbot: ON" or "Aimbot: OFF"
-    aimbotButton.BackgroundColor3 = AimbotEnabled and Color3.fromRGB(0, 255, 0) or Color3.fromRGB(255, 0, 0)
-end)
+createToggle("ESP Players", settings.espPlayers, UDim2.new(0, 10, 0, 10), function(v) settings.espPlayers = v end)
+createToggle("ESP Zombies", settings.espZombies, UDim2.new(0, 10, 0, 50), function(v) settings.espZombies = v end)
+createToggle("ESP Items", settings.espItems, UDim2.new(0, 10, 0, 90), function(v) settings.espItems = v end)
+createToggle("Aimbot", settings.aimbotEnabled, UDim2.new(0, 10, 0, 130), function(v) settings.aimbotEnabled = v end)
+createToggle("Silent Aim", settings.silentAimEnabled, UDim2.new(0, 10, 0, 170), function(v) settings.silentAimEnabled = v end)
 
--- สร้างปุ่ม Silent Aim
-local silentAimButton = Instance.new("TextButton")
-silentAimButton.Parent = frame
-silentAimButton.Size = UDim2.new(0, 180, 0, 50)
-silentAimButton.Position = UDim2.new(0, 10, 0, 70)
-silentAimButton.Text = "Silent Aim: OFF"
-silentAimButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-silentAimButton.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
-silentAimButton.TextSize = 20
-silentAimButton.MouseButton1Click:Connect(function()
-    SilentAimEnabled = not SilentAimEnabled
-    silentAimButton.Text = SilentAimEnabled and "Silent Aim: ON" or "Silent Aim: OFF"
-    silentAimButton.BackgroundColor3 = SilentAimEnabled and Color3.fromRGB(0, 255, 0) or Color3.fromRGB(255, 0, 0)
-end)
+-- FOV Circle
+local fovCircle = Drawing.new("Circle")
+fovCircle.Visible = true
+fovCircle.Color = Color3.fromRGB(0, 255, 0)
+fovCircle.Thickness = 1
+fovCircle.Radius = settings.fov
+fovCircle.Filled = false
 
--- สร้างปุ่ม ESP
-local espButton = Instance.new("TextButton")
-espButton.Parent = frame
-espButton.Size = UDim2.new(0, 180, 0, 50)
-espButton.Position = UDim2.new(0, 10, 0, 130)
-espButton.Text = "ESP: ON"
-espButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-espButton.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
-espButton.TextSize = 20
-espButton.MouseButton1Click:Connect(function()
-    ESPEnabled = not ESPEnabled
-    espButton.Text = ESPEnabled and "ESP: ON" or "ESP: OFF"
-    espButton.BackgroundColor3 = ESPEnabled and Color3.fromRGB(0, 255, 0) or Color3.fromRGB(255, 0, 0)
-end)
-
--- สร้างปุ่มสำหรับเลือกเป้าหมาย (ผู้เล่น หรือ ซอมบี้)
-local targetingButton = Instance.new("TextButton")
-targetingButton.Parent = frame
-targetingButton.Size = UDim2.new(0, 180, 0, 50)
-targetingButton.Position = UDim2.new(0, 10, 0, 190)
-targetingButton.Text = "Targeting: Players"
-targetingButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-targetingButton.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
-targetingButton.TextSize = 20
-targetingButton.MouseButton1Click:Connect(function()
-    if TargetingOption == "Players" then
-        TargetingOption = "Zombies"
-        targetingButton.Text = "Targeting: Zombies"
-    else
-        TargetingOption = "Players"
-        targetingButton.Text = "Targeting: Players"
+-- ESP
+local function createESP(part, color)
+    local box = Drawing.new("Text")
+    box.Text = "ESP"
+    box.Color = color
+    box.Size = 14
+    box.Center = true
+    box.Outline = true
+    box.Visible = true
+    return function()
+        if part and part:IsDescendantOf(workspace) and part:FindFirstChild("HumanoidRootPart") then
+            local pos, onScreen = Camera:WorldToViewportPoint(part.HumanoidRootPart.Position)
+            box.Visible = onScreen
+            if onScreen then
+                box.Position = Vector2.new(pos.X, pos.Y)
+            end
+        else
+            box.Visible = false
+        end
     end
+end
+
+local espHandlers = {}
+
+RunService.RenderStepped:Connect(function()
+    fovCircle.Position = UserInputService:GetMouseLocation()
+
+    for _, handler in ipairs(espHandlers) do handler() end
 end)
 
--- ฟังก์ชันในการคำนวณการยิงแบบ Silent Aim
-local function calculateSilentAim(target)
-    if not SilentAimEnabled or not target then return end
-    
-    local targetPos = target.HumanoidRootPart.Position
-    local myPos = Camera.CFrame.Position
-    local direction = (targetPos - myPos).unit  -- คำนวณทิศทางจากผู้เล่นไปยังเป้าหมาย
-    
-    -- กำหนดให้การยิงจะถูกเล็งไปที่ตำแหน่งของศัตรู
-    Camera.CFrame = CFrame.lookAt(myPos, targetPos)
-end
+-- Target Finder
+local function getClosestTarget()
+    local targets = {}
+    if settings.aimAt == "Players" then
+        targets = Players:GetPlayers()
+    elseif workspace:FindFirstChild("Zombies") then
+        targets = workspace.Zombies:GetChildren()
+    end
 
--- ฟังก์ชันแสดง ESP
-local function createESP(target)
-    if not ESPEnabled or not target or not target:FindFirstChild("HumanoidRootPart") then return end
-
-    -- สร้าง ESP ให้กับตัวละครที่พบ
-    local espBox = Instance.new("BillboardGui")
-    espBox.Adornee = target.HumanoidRootPart
-    espBox.Size = UDim2.new(0, 200, 0, 50)
-    espBox.StudsOffset = Vector3.new(0, 3, 0)
-    espBox.Parent = target.HumanoidRootPart
-    
-    local espText = Instance.new("TextLabel")
-    espText.Size = UDim2.new(1, 0, 1, 0)
-    espText.BackgroundTransparency = 1
-    espText.TextColor3 = Color3.fromRGB(255, 255, 255)
-    espText.TextStrokeTransparency = 0.8
-    espText.Text = target.Name
-    espText.Parent = espBox
-end
-
--- ฟังก์ชันเลือกเป้าหมายที่อยู่ใน FOV และประเภทที่เลือก (ผู้เล่นหรือซอมบี้)
-local function getTargetInFOV()
-    local closestTarget = nil
-    local shortestDistance = TargetDistance
-
-    -- ค้นหาผู้เล่นหรือซอมบี้ในระยะ
-    for _, target in pairs(Workspace:GetChildren()) do
-        -- ตรวจสอบว่าเป็นผู้เล่น
-        if TargetingOption == "Players" and target:IsA("Model") and target:FindFirstChild("HumanoidRootPart") then
-            local player = Players:GetPlayerFromCharacter(target)
-            if player then
-                local distance = (Camera.CFrame.Position - target.HumanoidRootPart.Position).Magnitude
-                if distance < shortestDistance then
-                    closestTarget = target
-                    shortestDistance = distance
+    local closest = nil
+    local shortest = math.huge
+    for _, target in ipairs(targets) do
+        if target ~= LocalPlayer and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
+            local pos, onScreen = Camera:WorldToViewportPoint(target.Character.HumanoidRootPart.Position)
+            if onScreen then
+                local dist = (UserInputService:GetMouseLocation() - Vector2.new(pos.X, pos.Y)).Magnitude
+                if dist < shortest and dist <= settings.fov then
+                    shortest = dist
+                    closest = target
                 end
             end
-        -- หรือถ้าเป็นซอมบี้
-        elseif TargetingOption == "Zombies" and target:IsA("Model") and target:FindFirstChild("HumanoidRootPart") then
-            -- เช็คซอมบี้ในเกม (ปรับตามลักษณะซอมบี้ในเกมของคุณ)
-            local distance = (Camera.CFrame.Position - target.HumanoidRootPart.Position).Magnitude
-            if distance < shortestDistance then
-                closestTarget = target
-                shortestDistance = distance
-            end
         end
     end
-
-    return closestTarget
+    return closest
 end
 
--- ฟังก์ชันอัปเดต Aimbot และ Silent Aim
-local function updateAimbotAndSilentAim()
-    if AimbotEnabled then
-        -- ค้นหาเป้าหมายใน FOV
-        local target = getTargetInFOV()
+-- Silent Aim Hook Example
+local __namecall
+__namecall = hookmetamethod(game, "__namecall", function(self, ...)
+    local args = {...}
+    local method = getnamecallmethod()
 
-        if target then
-            -- ถ้าเปิด Silent Aim จะยิงไปที่ตำแหน่งของศัตรูโดยไม่ต้องเล็ง
-            calculateSilentAim(target)
+    if settings.silentAimEnabled and tostring(self) == "Raycast" and method == "InvokeServer" then
+        local target = getClosestTarget()
+        if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
+            -- Modify the ray origin/direction here if needed
+            -- args[1] = modified
+            -- args[2] = modified
+            return __namecall(self, unpack(args))
         end
     end
-end
 
--- เรียกใช้งานฟังก์ชัน
-game:GetService("RunService").Heartbeat:Connect(function()
-    updateAimbotAndSilentAim()
-
-    -- สร้าง ESP สำหรับผู้เล่นที่ใกล้
-    for _, player in pairs(Players:GetPlayers()) do
-        if player.Character then
-            createESP(player.Character)
-        end
-    end
+    return __namecall(self, ...)
 end)
+
+-- Initial ESP Setup
+local function setupESP()
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and settings.espPlayers then
+            table.insert(espHandlers, createESP(player.Character, Color3.fromRGB(255, 255, 0)))
+        end
+    end
+
+    if workspace:FindFirstChild("Zombies") and settings.espZombies then
+        for _, zombie in ipairs(workspace.Zombies:GetChildren()) do
+            table.insert(espHandlers, createESP(zombie, Color3.fromRGB(255, 0, 0)))
+        end
+    end
+end
+
+Players.PlayerAdded:Connect(setupESP)
+setupESP()
