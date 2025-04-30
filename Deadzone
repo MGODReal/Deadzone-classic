@@ -3,7 +3,9 @@ local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 local Camera = game:GetService("Workspace").CurrentCamera
 local UserInputService = game:GetService("UserInputService")
+local player = Players.LocalPlayer
 
+-- ตัวแปรการตั้งค่า
 local TargetDistance = 200  -- ระยะการล็อกเป้าหมาย
 local FOV_CircleRadius = 50 -- ขนาดของวงกลม FOV
 local AimbotEnabled = true  -- เปิด/ปิด Aimbot
@@ -11,30 +13,84 @@ local SilentAimEnabled = false -- เปิด/ปิด Silent Aim
 local ESPEnabled = true -- เปิด/ปิด ESP
 local TargetingOption = "Players"  -- ตัวเลือกการเล็ง: "Players" หรือ "Zombies"
 
--- ฟังก์ชันในการวาดวงกลม FOV
-local function drawFOV()
-    if not AimbotEnabled then return end
-    
-    local player = Players.LocalPlayer
-    local mousePos = UserInputService:GetMouseLocation()
-    local fovCircle = Instance.new("Frame")
-    
-    fovCircle.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
-    fovCircle.Size = UDim2.new(0, FOV_CircleRadius * 2, 0, FOV_CircleRadius * 2)
-    fovCircle.Position = UDim2.new(0, mousePos.X - FOV_CircleRadius, 0, mousePos.Y - FOV_CircleRadius)
-    fovCircle.AnchorPoint = Vector2.new(0.5, 0.5)
-    fovCircle.BorderSizePixel = 0
-    fovCircle.Parent = game.CoreGui
+-- สร้าง UI
+local screenGui = Instance.new("ScreenGui")
+screenGui.Parent = player.PlayerGui
 
-    -- ลบวงกลม FOV เมื่อไม่ได้ใช้งาน
-    game:GetService("RunService").Heartbeat:Connect(function()
-        if not AimbotEnabled then
-            fovCircle:Destroy()
-        end
-    end)
-end
+-- สร้างกรอบหลักของ UI
+local frame = Instance.new("Frame")
+frame.Parent = screenGui
+frame.Size = UDim2.new(0, 200, 0, 300)
+frame.Position = UDim2.new(0, 10, 0, 10)
+frame.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+frame.BorderSizePixel = 0
+frame.BackgroundTransparency = 0.5
 
--- ฟังก์ชันคำนวณการยิงแบบ Silent Aim
+-- สร้างปุ่ม Aimbot
+local aimbotButton = Instance.new("TextButton")
+aimbotButton.Parent = frame
+aimbotButton.Size = UDim2.new(0, 180, 0, 50)
+aimbotButton.Position = UDim2.new(0, 10, 0, 10)
+aimbotButton.Text = "Aimbot: ON"
+aimbotButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+aimbotButton.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
+aimbotButton.TextSize = 20
+aimbotButton.MouseButton1Click:Connect(function()
+    AimbotEnabled = not AimbotEnabled
+    aimbotButton.Text = AimbotEnabled and "Aimbot: ON" or "Aimbot: OFF"
+    aimbotButton.BackgroundColor3 = AimbotEnabled and Color3.fromRGB(0, 255, 0) or Color3.fromRGB(255, 0, 0)
+end)
+
+-- สร้างปุ่ม Silent Aim
+local silentAimButton = Instance.new("TextButton")
+silentAimButton.Parent = frame
+silentAimButton.Size = UDim2.new(0, 180, 0, 50)
+silentAimButton.Position = UDim2.new(0, 10, 0, 70)
+silentAimButton.Text = "Silent Aim: OFF"
+silentAimButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+silentAimButton.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+silentAimButton.TextSize = 20
+silentAimButton.MouseButton1Click:Connect(function()
+    SilentAimEnabled = not SilentAimEnabled
+    silentAimButton.Text = SilentAimEnabled and "Silent Aim: ON" or "Silent Aim: OFF"
+    silentAimButton.BackgroundColor3 = SilentAimEnabled and Color3.fromRGB(0, 255, 0) or Color3.fromRGB(255, 0, 0)
+end)
+
+-- สร้างปุ่ม ESP
+local espButton = Instance.new("TextButton")
+espButton.Parent = frame
+espButton.Size = UDim2.new(0, 180, 0, 50)
+espButton.Position = UDim2.new(0, 10, 0, 130)
+espButton.Text = "ESP: ON"
+espButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+espButton.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
+espButton.TextSize = 20
+espButton.MouseButton1Click:Connect(function()
+    ESPEnabled = not ESPEnabled
+    espButton.Text = ESPEnabled and "ESP: ON" or "ESP: OFF"
+    espButton.BackgroundColor3 = ESPEnabled and Color3.fromRGB(0, 255, 0) or Color3.fromRGB(255, 0, 0)
+end)
+
+-- สร้างปุ่มสำหรับเลือกเป้าหมาย (ผู้เล่น หรือ ซอมบี้)
+local targetingButton = Instance.new("TextButton")
+targetingButton.Parent = frame
+targetingButton.Size = UDim2.new(0, 180, 0, 50)
+targetingButton.Position = UDim2.new(0, 10, 0, 190)
+targetingButton.Text = "Targeting: Players"
+targetingButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+targetingButton.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
+targetingButton.TextSize = 20
+targetingButton.MouseButton1Click:Connect(function()
+    if TargetingOption == "Players" then
+        TargetingOption = "Zombies"
+        targetingButton.Text = "Targeting: Zombies"
+    else
+        TargetingOption = "Players"
+        targetingButton.Text = "Targeting: Players"
+    end
+end)
+
+-- ฟังก์ชันในการคำนวณการยิงแบบ Silent Aim
 local function calculateSilentAim(target)
     if not SilentAimEnabled or not target then return end
     
@@ -100,9 +156,6 @@ end
 -- ฟังก์ชันอัปเดต Aimbot และ Silent Aim
 local function updateAimbotAndSilentAim()
     if AimbotEnabled then
-        -- วาดวงกลม FOV
-        drawFOV()
-
         -- ค้นหาเป้าหมายใน FOV
         local target = getTargetInFOV()
 
@@ -121,30 +174,6 @@ game:GetService("RunService").Heartbeat:Connect(function()
     for _, player in pairs(Players:GetPlayers()) do
         if player.Character then
             createESP(player.Character)
-        end
-    end
-end)
-
--- ฟังก์ชันเปิด/ปิด Aimbot, Silent Aim และ ESP
-UserInputService.InputBegan:Connect(function(input)
-    if input.KeyCode == Enum.KeyCode.F1 then
-        AimbotEnabled = not AimbotEnabled  -- กด F1 เพื่อเปิด/ปิด Aimbot
-    end
-    
-    if input.KeyCode == Enum.KeyCode.F2 then
-        SilentAimEnabled = not SilentAimEnabled  -- กด F2 เพื่อเปิด/ปิด Silent Aim
-    end
-    
-    if input.KeyCode == Enum.KeyCode.F3 then
-        ESPEnabled = not ESPEnabled  -- กด F3 เพื่อเปิด/ปิด ESP
-    end
-
-    if input.KeyCode == Enum.KeyCode.F4 then
-        -- สลับเป้าหมายระหว่างผู้เล่นและซอมบี้
-        if TargetingOption == "Players" then
-            TargetingOption = "Zombies"
-        else
-            TargetingOption = "Players"
         end
     end
 end)
